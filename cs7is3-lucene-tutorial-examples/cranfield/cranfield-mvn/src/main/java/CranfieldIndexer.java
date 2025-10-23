@@ -3,6 +3,7 @@ import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.store.FSDirectory;
+
 import java.io.*;
 import java.nio.file.*;
 
@@ -28,45 +29,54 @@ public class CranfieldIndexer {
     private static void parseAndIndex(String file, IndexWriter writer) throws Exception {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
             String line, section = "";
-            StringBuilder T = new StringBuilder(), A = new StringBuilder(), 
-                          B = new StringBuilder(), W = new StringBuilder();
+            StringBuilder T = new StringBuilder();
+            StringBuilder A = new StringBuilder();
+            StringBuilder B = new StringBuilder();
+            StringBuilder W = new StringBuilder();
             String docno = null;
-
-            Runnable flushDoc = () -> {
-                try {
-                    if (docno != null) {
-                        Document doc = new Document();
-                        doc.add(new StringField("docno", docno, Field.Store.YES));
-                        doc.add(new TextField("title", T.toString(), Field.Store.YES));
-                        doc.add(new TextField("authors", A.toString(), Field.Store.NO));
-                        doc.add(new TextField("bib", B.toString(), Field.Store.NO));
-                        doc.add(new TextField("abstract", W.toString(), Field.Store.YES));
-                        doc.add(new TextField("content", T + "\n" + A + "\n" + B + "\n" + W, Field.Store.NO));
-                        writer.addDocument(doc);
-                    }
-                } catch (IOException e) { throw new UncheckedIOException(e); }
-            };
 
             while ((line = br.readLine()) != null) {
                 if (line.startsWith(".I ")) {
-                    if (docno != null) flushDoc.run();
+                    if (docno != null) {
+                        addDoc(writer, docno, T.toString(), A.toString(), B.toString(), W.toString());
+                    }
                     T.setLength(0); A.setLength(0); B.setLength(0); W.setLength(0);
                     docno = line.substring(3).trim();
                     section = "";
-                } else if (line.startsWith(".T")) section = "T";
-                else if (line.startsWith(".A")) section = "A";
-                else if (line.startsWith(".B")) section = "B";
-                else if (line.startsWith(".W")) section = "W";
-                else {
+                } else if (line.startsWith(".T")) {
+                    section = "T";
+                } else if (line.startsWith(".A")) {
+                    section = "A";
+                } else if (line.startsWith(".B")) {
+                    section = "B";
+                } else if (line.startsWith(".W")) {
+                    section = "W";
+                } else {
                     switch (section) {
                         case "T": T.append(line).append('\n'); break;
                         case "A": A.append(line).append('\n'); break;
                         case "B": B.append(line).append('\n'); break;
                         case "W": W.append(line).append('\n'); break;
+                        default:  // ignore
                     }
                 }
             }
-            if (docno != null) flushDoc.run();
+            if (docno != null) {
+                addDoc(writer, docno, T.toString(), A.toString(), B.toString(), W.toString());
+            }
         }
+    }
+
+    private static void addDoc(IndexWriter writer, String docno,
+                               String title, String authors, String bib, String abstr) throws IOException {
+        Document doc = new Document();
+        doc.add(new StringField("docno", docno, Field.Store.YES));
+        doc.add(new TextField("title", title, Field.Store.YES));
+        doc.add(new TextField("authors", authors, Field.Store.NO));
+        doc.add(new TextField("bib", bib, Field.Store.NO));
+        doc.add(new TextField("abstract", abstr, Field.Store.YES));
+        String full = title + "\n" + authors + "\n" + bib + "\n" + abstr;
+        doc.add(new TextField("content", full, Field.Store.NO));
+        writer.addDocument(doc);
     }
 }
