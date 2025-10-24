@@ -113,7 +113,7 @@ public class CranfieldSearcher {
                 ScoreDoc[] hits = results.scoreDocs;
 
                 for (int rank = 0; rank < hits.length; rank++) {
-                    Document doc = searcher.doc(hits[rank].doc);
+                    Document doc = searcher.storedFields().document(hits[rank].doc);
 
                     // 从索引中取 docno（确保 Indexer 用 Store.YES 存了 "docno"）
                     String docno = doc.get("docno");
