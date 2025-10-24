@@ -37,6 +37,12 @@
       <artifactId>lucene-misc</artifactId>
       <version>${lucene.version}</version>
     </dependency>
+
+    <dependency>
+        <groupId>org.apache.lucene</groupId>
+        <artifactId>lucene-similarities</artifactId>
+        <version>${lucene.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
