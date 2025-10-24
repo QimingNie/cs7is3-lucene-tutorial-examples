@@ -16,7 +16,7 @@ public class CranfieldSearcher {
     public static void main(String[] args) throws Exception {
 
         if (args.length < 3) {
-            System.out.println("Usage: java CranfieldSearcher <indexDir> <queryFile> <outputDir> [--model vsm|bm25|lm|dfr]");
+            System.out.println("Usage: java CranfieldSearcher <indexDir> <queryFile> <outputDir> [--model=vsm|bm25|lm|dfr]");
             return;
         }
 
@@ -32,7 +32,7 @@ public class CranfieldSearcher {
 
         System.out.println("Selected model: " + model.toUpperCase());
 
-        // Set up similarity
+        // Set up similarity (ranking model)
         Similarity similarity;
         switch (model) {
             case "vsm":
@@ -46,25 +46,29 @@ public class CranfieldSearcher {
                 similarity = new LMDirichletSimilarity();
                 break;
             case "dfr":
-                similarity = new DFRSimilarity(new BasicModelP(), new AfterEffectB(), new NormalizationH2());
+                similarity = new DFRSimilarity(
+                        new BasicModelIF(),  
+                        new AfterEffectB(),
+                        new NormalizationH2()
+                );
                 break;
             default:
                 System.out.println("Unknown model, defaulting to BM25");
                 similarity = new BM25Similarity();
         }
 
-        // Prepare Lucene searcher
+        // Initialize searcher
         DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDir)));
         IndexSearcher searcher = new IndexSearcher(reader);
         searcher.setSimilarity(similarity);
 
         Analyzer analyzer = new EnglishAnalyzer();
 
-        // Prepare output file
+        // Output file
         String outputFile = Paths.get(outputDir, "run_" + model + ".txt").toString();
         BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
 
-        // Read queries
+        // Read queries from Cranfield format
         BufferedReader br = new BufferedReader(new FileReader(queryFile));
         String line;
         int queryID = 0;
@@ -84,6 +88,7 @@ public class CranfieldSearcher {
                 queryText.append(line).append(" ");
             }
         }
+
         // Run the last query
         if (queryText.length() > 0) {
             runQuery(queryID, queryText.toString(), searcher, analyzer, writer, model);
@@ -109,7 +114,7 @@ public class CranfieldSearcher {
             Document doc = searcher.doc(hits[rank].doc);
             String docID = doc.get("docID");
             float score = hits[rank].score;
-            // TREC format: queryID Q0 docID rank score runID
+            // TREC output format: queryID Q0 docID rank score runID
             writer.write(String.format(Locale.ROOT, "%d Q0 %s %d %.6f Lucene-%s%n",
                     queryID, docID, rank + 1, score, model));
         }
