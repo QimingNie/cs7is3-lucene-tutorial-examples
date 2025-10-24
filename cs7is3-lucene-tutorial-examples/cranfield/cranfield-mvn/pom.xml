@@ -19,14 +19,22 @@
       <artifactId>lucene-core</artifactId>
       <version>${lucene.version}</version>
     </dependency>
+
     <dependency>
       <groupId>org.apache.lucene</groupId>
       <artifactId>lucene-queryparser</artifactId>
       <version>${lucene.version}</version>
     </dependency>
+
     <dependency>
       <groupId>org.apache.lucene</groupId>
       <artifactId>lucene-analyzers-common</artifactId>
+      <version>${lucene.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-misc</artifactId>
       <version>${lucene.version}</version>
     </dependency>
   </dependencies>
@@ -46,8 +54,12 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.3.0</version>
+        <configuration>
+          <mainClass>CranfieldSearcher</mainClass>
+        </configuration>
       </plugin>
     </plugins>
   </build>
 </project>
+
 
