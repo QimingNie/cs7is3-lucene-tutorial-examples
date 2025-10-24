@@ -1,3 +1,5 @@
+package ie.tcd.qn;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.document.Document;
@@ -8,74 +10,111 @@ import org.apache.lucene.search.similarities.*;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.*;
-import java.nio.file.*;
+import java.nio.file.Paths;
+import java.util.Locale;
 
 public class CranfieldSearcher {
+
     public static void main(String[] args) throws Exception {
-        if (args.length < 5) {
-            System.err.println("Usage: java CranfieldSearcher <indexDir> <queryFile> <outputFile> <similarity> <maxHits>");
-            System.exit(1);
+
+        if (args.length < 3) {
+            System.out.println("Usage: java CranfieldSearcher <indexDir> <queryFile> <outputDir> [--model vsm|bm25|lm|dfr]");
+            return;
         }
 
-        Path indexDir = Paths.get(args[0]);
+        String indexDir = args[0];
         String queryFile = args[1];
-        String outputFile = args[2];
-        String simType = args[3];
-        int maxHits = Integer.parseInt(args[4]);
+        String outputDir = args[2];
+        String model = "bm25"; // default
 
+        // Optional parameter
+        if (args.length >= 4 && args[3].startsWith("--model")) {
+            model = args[3].split("=")[1].toLowerCase(Locale.ROOT);
+        }
+
+        System.out.println("Selected model: " + model.toUpperCase());
+
+        // Set up similarity
         Similarity similarity;
-        if (simType.equalsIgnoreCase("bm25")) {
-            similarity = new BM25Similarity();
-        } else {
-            similarity = new ClassicSimilarity(); // Vector Space Model
+        switch (model) {
+            case "vsm":
+                similarity = new ClassicSimilarity();
+                break;
+            case "bm25":
+                similarity = new BM25Similarity();
+                break;
+            case "lm":
+            case "lmdirichlet":
+                similarity = new LMDirichletSimilarity();
+                break;
+            case "dfr":
+                similarity = new DFRSimilarity(new BasicModelP(), new AfterEffectB(), new NormalizationH2());
+                break;
+            default:
+                System.out.println("Unknown model, defaulting to BM25");
+                similarity = new BM25Similarity();
         }
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(queryFile));
-             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
-             DirectoryReader indexReader = DirectoryReader.open(FSDirectory.open(indexDir))) {
+        // Prepare Lucene searcher
+        DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDir)));
+        IndexSearcher searcher = new IndexSearcher(reader);
+        searcher.setSimilarity(similarity);
 
-            IndexSearcher searcher = new IndexSearcher(indexReader);
-            searcher.setSimilarity(similarity);
-            Analyzer analyzer = new EnglishAnalyzer();
-            QueryParser parser = new QueryParser("content", analyzer);
+        Analyzer analyzer = new EnglishAnalyzer();
 
-            String line;
-            StringBuilder queryText = new StringBuilder();
-            String queryId = null;
+        // Prepare output file
+        String outputFile = Paths.get(outputDir, "run_" + model + ".txt").toString();
+        BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
 
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith(".I ")) {
-                    // previous query flush
-                    if (queryId != null && queryText.length() > 0) {
-                        executeQuery(searcher, parser, queryId, queryText.toString(), maxHits, writer);
-                    }
-                    queryId = line.substring(3).trim();
+        // Read queries
+        BufferedReader br = new BufferedReader(new FileReader(queryFile));
+        String line;
+        int queryID = 0;
+        StringBuilder queryText = new StringBuilder();
+
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.startsWith(".I")) {
+                if (queryID != 0) {
+                    runQuery(queryID, queryText.toString(), searcher, analyzer, writer, model);
                     queryText.setLength(0);
-                } else if (!line.startsWith(".W")) {
-                    queryText.append(line).append(' ');
                 }
-            }
-            // flush last query
-            if (queryId != null && queryText.length() > 0) {
-                executeQuery(searcher, parser, queryId, queryText.toString(), maxHits, writer);
+                queryID++;
+            } else if (line.startsWith(".W")) {
+                continue;
+            } else {
+                queryText.append(line).append(" ");
             }
         }
+        // Run the last query
+        if (queryText.length() > 0) {
+            runQuery(queryID, queryText.toString(), searcher, analyzer, writer, model);
+        }
 
-        System.out.println("Search results saved to " + outputFile);
+        br.close();
+        writer.close();
+        reader.close();
+
+        System.out.println("Search completed. Output saved to: " + outputFile);
     }
 
-    private static void executeQuery(IndexSearcher searcher, QueryParser parser, String queryId,
-                                     String queryText, int maxHits, BufferedWriter writer) throws Exception {
-        Query query = parser.parse(QueryParser.escape(queryText));
-        TopDocs topDocs = searcher.search(query, maxHits);
+    private static void runQuery(int queryID, String queryString, IndexSearcher searcher,
+                                 Analyzer analyzer, BufferedWriter writer, String model) throws Exception {
 
-        for (int i = 0; i < topDocs.scoreDocs.length; i++) {
-            ScoreDoc sd = topDocs.scoreDocs[i];
-            Document doc = searcher.doc(sd.doc);
-            String docno = doc.get("docno");
-            float score = sd.score;
-            writer.write(String.format("%s Q0 %s %d %.4f Lucene\n", queryId, docno, i + 1, score));
+        QueryParser parser = new QueryParser("contents", analyzer);
+        Query query = parser.parse(QueryParser.escape(queryString));
+
+        TopDocs results = searcher.search(query, 1000);
+        ScoreDoc[] hits = results.scoreDocs;
+
+        for (int rank = 0; rank < hits.length; rank++) {
+            Document doc = searcher.doc(hits[rank].doc);
+            String docID = doc.get("docID");
+            float score = hits[rank].score;
+            // TREC format: queryID Q0 docID rank score runID
+            writer.write(String.format(Locale.ROOT, "%d Q0 %s %d %.6f Lucene-%s%n",
+                    queryID, docID, rank + 1, score, model));
         }
-        writer.flush();
     }
 }
+
