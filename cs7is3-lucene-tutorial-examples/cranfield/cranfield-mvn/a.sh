@@ -80,24 +80,5 @@ for m in "${MODELS[@]}"; do
   run_model "${m}"
 done
 
-
-echo "==================== Summary (MAP / R-prec / P@10 / P@20 / nDCG@10 / nDCG@20) ===================="
-printf "%-10s | %-8s | %-8s | %-8s | %-8s | %-10s | %-10s\n" "Model" "MAP" "R-prec" "P@10" "P@20" "nDCG@10" "nDCG@20"
-printf -- "-------------------------------------------------------------------------------------------------\n"
-for m in "${MODELS[@]}"; do
-  case "${m}" in
-    vsm) eval_file="${OUTPUT_DIR}/eval_classic.txt" ;; # vsm 用 classic 的文件
-    *)   eval_file="${OUTPUT_DIR}/eval_${m}.txt" ;;
-  esac
-  map=$(grep -E '^map[[:space:]]+all'         "${eval_file}" | awk '{print $3}')
-  rpr=$(grep -E '^Rprec[[:space:]]+all'       "${eval_file}" | awk '{print $3}')
-  p10=$(grep -E '^P_10[[:space:]]+all'        "${eval_file}" | awk '{print $3}')
-  p20=$(grep -E '^P_20[[:space:]]+all'        "${eval_file}" | awk '{print $3}')
-  ndc10=$(grep -E '^ndcg_cut_10[[:space:]]+all' "${eval_file}" | awk '{print $3}')
-  ndc20=$(grep -E '^ndcg_cut_20[[:space:]]+all' "${eval_file}" | awk '{print $3}')
-  printf "%-10s | %-8s | %-8s | %-8s | %-8s | %-10s | %-10s\n" "${m}" "${map:-NA}" "${rpr:-NA}" "${p10:-NA}" "${p20:-NA}" "${ndc10:-NA}" "${ndc20:-NA}"
-done
-echo "================================================================================================="
-
 echo "Done. Full outputs under: ${OUTPUT_DIR}"
 
