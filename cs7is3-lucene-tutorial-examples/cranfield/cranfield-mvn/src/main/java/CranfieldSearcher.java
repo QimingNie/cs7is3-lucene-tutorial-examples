@@ -18,6 +18,10 @@ import java.util.Locale;
 
 public class CranfieldSearcher {
 
+    /*
+     * Main
+     * Select the scorer based on the input model name and output the scoring file.
+     */
     public static void main(String[] args) throws Exception {
         if (args.length < 3) {
             System.out.println("Usage: java CranfieldSearcher <indexDir> <queryFile> <outputDir> [--model=vsm|classic|bm25|lm|dfr] [--maxHits=N]");
@@ -28,10 +32,8 @@ public class CranfieldSearcher {
         final String queryFile = args[1];
         final String outputDir = args[2];
 
-        // ---- 参数解析（统一用一个变量）----
         String model = null;
         Integer maxHits = null;
-
         for (String a : args) {
             if (a.startsWith("--model=")) {
                 model = a.substring("--model=".length()).toLowerCase(Locale.ROOT);
@@ -39,27 +41,26 @@ public class CranfieldSearcher {
                 maxHits = Integer.parseInt(a.substring("--maxHits=".length()));
             }
         }
-        // 兼容旧的“第4个位置参数是模型名”
+        // legacy positional model at args[3]
         if (model == null && args.length >= 4 && !args[3].isEmpty() && !args[3].startsWith("--")) {
             model = args[3].toLowerCase(Locale.ROOT);
         }
         if (model == null) model = "bm25";
-        if (maxHits == null) {
-            // 兼容旧的“第5个位置参数是 maxHits”
-            if (args.length >= 5 && !args[4].startsWith("--")) {
-                try { maxHits = Integer.parseInt(args[4]); } catch (Exception ignored) {}
-            }
+
+        // legacy positional maxHits at args[4]
+        if (maxHits == null && args.length >= 5 && !args[4].startsWith("--")) {
+            try { maxHits = Integer.parseInt(args[4]); } catch (Exception ignored) {}
         }
         if (maxHits == null) maxHits = 1000;
 
-        // ---- 选择 Similarity & 输出文件名 ----
+        //Similarity and output filename
         Similarity similarity;
         String outName;
         switch (model) {
             case "classic":
             case "vsm":
                 similarity = new ClassicSimilarity();
-                outName = "run_classic.txt"; // vsm 归类到 classic 文件
+                outName = "run_classic.txt"; // treat vsm as classic
                 System.out.println("Selected model: CLASSIC");
                 break;
             case "bm25":
@@ -84,45 +85,46 @@ public class CranfieldSearcher {
                 outName = "run_bm25.txt";
         }
 
-        // ---- 确保输出目录存在 ----
+        //Ensure output directory and path
         Path outDir = Paths.get(outputDir);
         Files.createDirectories(outDir);
         Path outPath = outDir.resolve(outName);
 
-        // ---- 初始化索引读取 & 搜索器 ----
+        //Open index reader & searcher with chosen Similarity
         DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDir)));
         IndexSearcher searcher = new IndexSearcher(reader);
         searcher.setSimilarity(similarity);
         Analyzer analyzer = new EnglishAnalyzer();
+        QueryParser parser = new QueryParser("content", analyzer); // match the indexer’s aggregated field
 
-        // ---- 解析 Cranfield 查询（只取 .W 段）----
+        //Read queries
         List<String> queries = readCranfieldQueries(queryFile);
 
-        // ---- 执行检索并写 TREC 格式 ----
+        //Execute search and write TREC output
         try (BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(Files.newOutputStream(outPath), StandardCharsets.UTF_8))) {
-
-            QueryParser parser = new QueryParser("content", analyzer); // 与 Indexer 的聚合字段一致
 
             for (int qid = 1; qid <= queries.size(); qid++) {
                 String qtext = queries.get(qid - 1);
                 if (qtext == null || qtext.isBlank()) continue;
 
+                // Escape special chars and parse into a Lucene Query
                 Query query = parser.parse(QueryParser.escape(qtext));
+
+                // Search top N
                 TopDocs results = searcher.search(query, maxHits);
                 ScoreDoc[] hits = results.scoreDocs;
 
+                // Write TREC lines
                 for (int rank = 0; rank < hits.length; rank++) {
                     Document doc = searcher.storedFields().document(hits[rank].doc);
-
-                    // 从索引中取 docno（确保 Indexer 用 Store.YES 存了 "docno"）
-                    String docno = doc.get("docno");
+                    String docno = doc.get("docno"); 
+                    // Avoid having docno be empty
                     if (docno == null || docno.isEmpty()) {
-                        // 兜底：用内部 doc id 避免空（不推荐，但保证 trec_eval 可读）
-                        docno = String.valueOf(hits[rank].doc);
+                        docno = String.valueOf(hits[rank].doc); 
                     }
-
                     float score = hits[rank].score;
+
                     // TREC: qid Q0 docno rank score tag
                     writer.write(String.format(Locale.ROOT,
                             "%d Q0 %s %d %.6f lucene-%s%n",
@@ -132,10 +134,13 @@ public class CranfieldSearcher {
         }
 
         reader.close();
-        System.out.println("Search completed. Output saved to: " + outPath.toString());
+        System.out.println("Search completed. Output saved to: " + outPath);
     }
 
-    // 只抽取 .W 段文本，按 .I 分隔查询
+    /*
+     * Iterate lines in queryFile.
+     * Return list of query texts in order (qid = index + 1).
+     */
     private static List<String> readCranfieldQueries(String queryFile) throws IOException {
         List<String> queries = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(
