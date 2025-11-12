@@ -8,7 +8,7 @@ QRELS="${4:-../QRelsCorrectedforTRECeval}"
 MAX_HITS="${5:-1000}"                        
 
 MAIN_CLASS="CranfieldSearcher"               
-MODELS=("bm25" "classic" "vsm" "lm" "dfr")    
+MODELS=("bm25" "vsm" "lm" "dfr")    
 
 
 mkdir -p "${OUTPUT_DIR}"
