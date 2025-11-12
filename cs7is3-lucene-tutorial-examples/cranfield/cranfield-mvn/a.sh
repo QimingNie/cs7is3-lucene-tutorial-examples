@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+export JAVA_TOOL_OPTIONS="--enable-native-access=ALL-UNNAMED --add-modules jdk.incubator.vector"
 INDEX_DIR="${1:-../cran_index_1030}"         
 QUERY_FILE="${2:-../cran.qry}"               
 OUTPUT_DIR="${3:-runs}"                       
@@ -51,8 +51,7 @@ run_model() {
   local run_file=""
   case "${model}" in
     bm25)    run_file="${OUTPUT_DIR}/run_bm25.txt" ;;
-    classic) run_file="${OUTPUT_DIR}/run_classic.txt" ;;
-    vsm)     run_file="${OUTPUT_DIR}/run_classic.txt" ;; # vsm 归入 classic 文件名
+    vsm)     run_file="${OUTPUT_DIR}/run_classic.txt" ;;
     lm)      run_file="${OUTPUT_DIR}/run_lm.txt" ;;
     dfr)     run_file="${OUTPUT_DIR}/run_dfr.txt" ;;
     *)       run_file="${OUTPUT_DIR}/run_${model}.txt" ;;
